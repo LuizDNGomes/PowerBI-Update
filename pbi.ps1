@@ -1,20 +1,80 @@
-# Caminho para o arquivo .pbix
-$pbixPath = "C:\Users\Lenovo\OneDrive - Excel Engenharia\Documentos\Relatórios - Denis\Gestão de Projetos - BI.pbix"
+# Importa os módulos necessários
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
 
-# Caminho para salvar o arquivo atualizado
-$updatedPbixPath = "C:\Users\Lenovo\OneDrive - Excel Engenharia\Documentos\Relatórios - Denis\Gestão de Projetos - BI_Atualizado.pbix"
+function Show-Message {
+    param (
+        [string]$message
+    )
+    $form = New-Object Windows.Forms.Form
+    $form.Text = "Mensagem"
+    $label = New-Object Windows.Forms.Label
+    $label.Text = $message
+    $label.AutoSize = $true
+    $form.Controls.Add($label)
+    $form.StartPosition = "CenterScreen"
+    $form.AutoSize = $true
+    $form.Topmost = $true
+    $timer = New-Object Windows.Forms.Timer
+    $timer.Interval = 5000
+    $timer.Add_Tick({ $form.Close() })
+    $timer.Start()
+    $form.ShowDialog()
+}
 
-# Caminho para o executável do Power BI Desktop instalado pela Microsoft Store
-$powerBIPath = "C:\Users\lenovo\AppData\Local\Microsoft\WindowsApps\PBIDesktopStore.exe"
+function Is-PowerBI-Running {
+    $processes = Get-Process -Name "PBIDesktop" -ErrorAction SilentlyContinue
+    return $processes -ne $null
+}
 
-# Comando para abrir o Power BI Desktop e atualizar as fontes de dados
-Start-Process -FilePath $powerBIPath -ArgumentList "$pbixPath"
+function Is-File-Open {
+    param (
+        [string]$filePath
+    )
+    $fileName = [System.IO.Path]::GetFileName($filePath)
+    $processes = Get-Process -Name "PBIDesktop" -ErrorAction SilentlyContinue
+    foreach ($proc in $processes) {
+        try {
+            $openFiles = (Get-Process -Id $proc.Id -FileVersionInfo).FileName
+            if ($openFiles -contains $filePath) {
+                return $true
+            }
+        } catch {
+            continue
+        }
+    }
+    return $false
+}
 
-# Espera um tempo para garantir que o Power BI Desktop abra e atualize as fontes de dados
-Start-Sleep -Seconds 60  # Ajuste o tempo conforme necessário
+function Update-PowerBI {
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.SendKeys]::SendWait("%c")
+    Start-Sleep -Milliseconds 500
+    [System.Windows.Forms.SendKeys]::SendWait("r")
+}
 
-# Comando para salvar o arquivo atualizado
-# Nota: Este comando pode variar dependendo de como o Power BI Desktop lida com o salvamento de arquivos
-# Você pode precisar salvar manualmente se o Power BI Desktop não suportar automação completa
+function Monitor-PowerBI-And-File {
+    param (
+        [string]$filePath
+    )
+    while ($true) {
+        if (Is-PowerBI-Running -and (Is-File-Open -filePath $filePath)) {
+            Write-Output "Arquivo detectado. Iniciando contagem regressiva..."
+            for ($i = 15; $i -gt 0; $i--) {
+                Write-Output "$i segundos restantes"
+                Start-Sleep -Seconds 1
+            }
+            Show-Message "Vamos atualizar seu Power BI em 5 segundos, aguarde."
+            Start-Sleep -Seconds 5
+            Update-PowerBI
+            Show-Message "Atualização concluída!"
+            return
+        }
+        Start-Sleep -Seconds 1
+    }
+}
 
-Write-Output "O arquivo foi atualizado e salvo com sucesso em $updatedPbixPath"
+# Caminho do arquivo a ser monitorado
+$filePath = "C:\Users\Lenovo\OneDrive - Excel Engenharia\Documentos\Relatórios - Denis\Gestão de Projetos - BI.pbix"
+
+Monitor-PowerBI-And-File -filePath $filePath
